@@ -32,7 +32,15 @@ def get():
 
 @app.post('/')
 def post(SearchInput: str = ""):
-    return generate_results_page(SearchInput)
+    return RedirectResponse(f"/search?q={SearchInput}", status_code=303)
+
+@app.get('/search')
+def get_search(q: str = ""):
+    return generate_results_page(q)
+
+@app.post('/search')
+def post_search(SearchInput: str = ""):
+    return RedirectResponse(f"/search?q={SearchInput}", status_code=303)
 
 def generate_home_page():
     return (
@@ -47,7 +55,7 @@ def generate_home_page():
                         Button("I'm feeling lucky", cls='bg-red-700 select-none text-white px-4 py-2 rounded-lg mt-4 hover:bg-red-800 transition-all'),
                         Button("Kontena Search", type="submit", cls='bg-red-700 select-none text-white px-4 py-2 rounded-lg mt-4 hover:bg-red-800 transition-all'),
                         cls='flex gap-4')
-                    , cls='w-full flex flex-col items-center gap-4', method="post"),
+                    , cls='w-full flex flex-col items-center gap-4', method="post", action="/"),
             cls='w-full md:w-1/2 flex flex-col items-center gap-10 p-5 md:p-2'),  
             cls='bg-[#08001a] min-h-screen flex items-center justify-center text-red-800', style=body_style
         )
@@ -59,13 +67,13 @@ def generate_results_page(query):
 
     search_bar = Form(
         Div(
-            Img(src="Kontena.svg", cls="h-8 mr-4 hidden md:block"),
+            A(Img(src="Kontena.svg", cls="h-8 mr-4 hidden md:block"), href="/"),
             Input(type="text", name="SearchInput", value=query,
                   cls='outline-none bg-transparent rounded-2xl border-2 border-red-800 focus:border-red-600 hover:border-red-600 p-2 transition-all text-white text-lg flex-grow'),
             Button("Search", type="submit", cls='bg-red-700 select-none text-white px-4 py-2 rounded-lg ml-2 hover:bg-red-800 transition-all'),
             cls='flex items-center w-full max-w-4xl'
         ),
-        cls='mb-8', method="post"
+        cls='mb-8', method="post", action="/search"
     )
 
     search_results = Div(
@@ -86,7 +94,7 @@ def generate_results_page(query):
             Div(
                 search_bar,
                 search_results,
-                Div(Img(src="Kontena.svg", cls="h-8 mr-4"),cls="w-full flex justify-end"),
+                Div(A(Img(src="Kontena.svg", cls="h-8 mr-4"), href="/"), cls="w-full flex justify-end"),
                 cls='w-full max-w-4xl mx-auto p-4 '
             ),
             cls='bg-[#08001a] min-h-screen text-red-800', style=body_style
