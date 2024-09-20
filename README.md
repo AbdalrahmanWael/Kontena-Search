@@ -1,6 +1,8 @@
 # Kontena Search Engine
 <div align="center">
-![Kontena](Kontena.svg)</div>
+  <img src="Kontena.svg" alt="Kontena">
+</div>
+
 Kontena is a lightweight, customizable search engine built with FastHTML. It features a simple, pixel-art inspired interface and allows users to search through a database of crawled web pages.
 
 ## Features
