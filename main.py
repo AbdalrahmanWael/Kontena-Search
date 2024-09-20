@@ -1,6 +1,8 @@
 from fasthtml.common import *
 import sqlite3
 from crawler import crawl
+from collections import Counter
+import math
 
 body_style = "font-family: 'Pixelify Sans', cursive;"
 tailwind = Script(src="https://cdn.tailwindcss.com")
@@ -8,16 +10,66 @@ font = Style("""@import url('https://fonts.googleapis.com/css2?family=Pixelify+S
 favicon = Favicon(light_icon='favicon.ico', dark_icon='favicon.ico')
 app = FastHTMLWithLiveReload(hdrs=(tailwind, font, favicon))
 
+def setup_database():
+    conn = sqlite3.connect('search_engine.db')
+    c = conn.cursor()
+    
+    # Create pages table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS pages
+                 (id INTEGER PRIMARY KEY, url TEXT UNIQUE, title TEXT, content TEXT, 
+                 description TEXT, keywords TEXT, last_crawled TIMESTAMP)''')
+    
+    # Create words table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS words
+                 (word TEXT, page_id INTEGER, frequency INTEGER,
+                 FOREIGN KEY(page_id) REFERENCES pages(id))''')
+    
+    # Create inverted index table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS inverted_index
+                 (word TEXT, page_id INTEGER, tf_idf REAL,
+                 FOREIGN KEY(page_id) REFERENCES pages(id))''')
+    
+    conn.commit()
+    conn.close()
+
+def create_index():
+    conn = sqlite3.connect('search_engine.db')
+    c = conn.cursor()
+    
+    # Clear existing index
+    c.execute("DELETE FROM inverted_index")
+    
+    # Get all words and their frequencies
+    c.execute("SELECT word, page_id, frequency FROM words")
+    word_frequencies = c.fetchall()
+    
+    # Count total documents and document frequency for each word
+    c.execute("SELECT COUNT(*) FROM pages")
+    total_documents = c.fetchone()[0]
+    word_doc_frequency = Counter(word for word, _, _ in word_frequencies)
+    
+    # Calculate TF-IDF for each word-document pair
+    for word, page_id, frequency in word_frequencies:
+        tf = frequency
+        idf = math.log(total_documents / word_doc_frequency[word])
+        tf_idf = tf * idf
+        
+        c.execute("INSERT INTO inverted_index (word, page_id, tf_idf) VALUES (?, ?, ?)",
+                  (word, page_id, tf_idf))
+    
+    conn.commit()
+    conn.close()
+
 def search_database(query):
     conn = sqlite3.connect('search_engine.db')
     c = conn.cursor()
-    words = query.split()
+    words = query.lower().split()
     placeholders = ','.join(['?'] * len(words))
     c.execute(f"""
-        SELECT p.url, p.title, p.content, SUM(w.frequency) as relevance
+        SELECT p.url, p.title, p.description, SUM(i.tf_idf) as relevance
         FROM pages p
-        JOIN words w ON p.id = w.page_id
-        WHERE w.word IN ({placeholders})
+        JOIN inverted_index i ON p.id = i.page_id
+        WHERE i.word IN ({placeholders})
         GROUP BY p.id
         ORDER BY relevance DESC
         LIMIT 10
@@ -82,7 +134,7 @@ def generate_results_page(query):
             Div(
                 A(result[1], href=result[0], cls="text-xl text-blue-500 hover:underline visited:text-purple-600"),
                 Div(result[0], cls="text-green-500 text-sm mb-1"),
-                P(result[2][:200] + "...", cls="text-gray-300"),
+                P(result[2] or "No description available", cls="text-gray-300"),
                 cls="mb-6"
             ) for result in results
         )
@@ -113,6 +165,7 @@ def get_add_url():
 @app.post('/add_url')
 def post_add_url(url: str):
     crawl(url, depth=1)  # Crawl just this URL
+    create_index()  # Update the index after crawling
     return Body(f"Added and crawled: {url}")
 
 @app.get('/admin/crawl')
@@ -128,9 +181,13 @@ def get_admin_crawl():
 @app.post('/admin/crawl')
 def post_admin_crawl(start_url: str, depth: int):
     crawl(start_url, depth)
+    create_index()  # Update the index after crawling
     return Body(f"Crawling started from {start_url} with depth {depth}")
 
 @app.get("/{fname:path}.{ext:static}")
 def static(fname:str, ext:str): return FileResponse(f'{fname}.{ext}')
+
+setup_database()
+create_index()
 
 serve()
